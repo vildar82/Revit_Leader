@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<RevitAddIns>
+  <AddIn Type="Command">
+    <Assembly>Leader\Leader.dll</Assembly>
+    <AddInId>113C4AA8-4127-446E-803F-7126C72FD8D1</AddInId>
+    <VendorId>Vildar</VendorId>
+    <VendorDescription>vildar82@gmail.com</VendorDescription>
+    <FullClassName>Leader.InsertTextLeader</FullClassName>
+    <Text>InsertTextLeader</Text>        
+  </AddIn>
+  <AddIn Type="Command">
+    <Assembly>Leader\Leader.dll</Assembly>
+    <AddInId>951C8EC5-B5C0-4AA7-8633-A4E4AA02482E</AddInId>
+    <VendorId>Vildar</VendorId>
+    <VendorDescription>vildar82@gmail.com</VendorDescription>
+    <FullClassName>Leader.TestIdling</FullClassName>
+    <Text>TestIdling</Text>
+  </AddIn>
+</RevitAddIns>
