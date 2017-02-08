@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8" standalone="no"?>
-<RevitAddIns>
-  <AddIn Type="Command">
-    <Assembly>Hello.dll</Assembly>
-    <AddInId>vildar1</AddInId>
-    <FullClassName>Hello.Class1</FullClassName>
-    <Text>Hello1</Text>        
-  </AddIn>
-</RevitAddIns>

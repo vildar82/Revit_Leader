@@ -221,24 +221,25 @@ namespace Leader
             AnnotationSymbol annoText;
             using (var t = new Transaction(doc, "Создание выноски"))
             {
-                t.Start();
-                // Вставка семейства в 0,0             
+                t.Start();                
 
+                // Вставка семейства выноски в документ
                 annoText = doc.Create.NewFamilyInstance(pt2, annoType, uiDoc.ActiveView) as AnnotationSymbol;
                 annoText.LookupParameter("Пояснение сверху").Set(text1);
                 annoText.LookupParameter("Пояснение снизу").Set(text2);
+
+                // Определение ширины выноски по тексту
                 annoText.LookupParameter("Длина").Set(0.01); // Минимальная длина линии 
-
                 doc.Regenerate();
-
                 var bound = annoText.get_BoundingBox(uiDoc.ActiveView);
                 var length = (bound.Max.X - bound.Min.X) * 1.1; // 1.1 - для отступа линии от текста
 
+                // Сдвиг на половыну выноски в сторону
                 var moveLocation = new XYZ(length * 0.52 * dir, 0, 0); // 0.52 - отступ точки присоединения выноски
                 annoText.Location.Move(moveLocation);
-                annoText.LookupParameter("Длина").Set(length / commandData.View.Scale);               
+                annoText.LookupParameter("Длина").Set(length / commandData.View.Scale);          
 
-                // Добавление выноски
+                // Добавление линии выноски
                 annoText.addLeader();
                 var leader = annoText.Leaders.get_Item(0);
                 leader.Elbow = pt2;
@@ -246,58 +247,7 @@ namespace Leader
 
                 t.Commit();
             }
-        }
-
-        //private void Insert(string text1, string text2)
-        //{
-        //    var uiApp = commandData.Application;
-        //    var uiDoc = uiApp.ActiveUIDocument;
-        //    var doc = uiDoc.Document;            
-
-        //    // Запрос точек ввода
-        //    var pt1 = uiDoc.Selection.PickPoint("Первая точка");
-        //    var pt2 = uiDoc.Selection.PickPoint("Вторая точка");
-        //    var dir = GetAnnoDirection(pt1, pt2);
-
-        //    AnnotationSymbol annoText;
-        //    using (var t = new Transaction(doc, "Создание выноски"))
-        //    {
-        //        t.Start();
-        //        // Вставка семейства в 0,0                
-        //        annoText = doc.Create.NewFamilyInstance(pt2, annoType, uiDoc.ActiveView) as AnnotationSymbol;
-        //        annoText.LookupParameter("Пояснение сверху").Set(text1);
-        //        annoText.LookupParameter("Пояснение снизу").Set(text2);                
-        //        annoText.LookupParameter("Длина").Set(0.01); // Минимальная длина линии                
-
-        //        t.Commit();
-        //    }
-
-        //    using (var t = new Transaction(doc, "Редактирование выноски"))
-        //    {
-        //        t.Start();
-
-        //        var bound = annoText.get_BoundingBox(uiDoc.ActiveView);
-        //        var length = (bound.Max.X - bound.Min.X)*1.1; // 1.1 - для отступа линии от текста
-
-        //        var moveLocation = new XYZ(length * 0.52 * dir, 0, 0); // 0.52 - отступ точки присоединения выноски
-        //        annoText.Location.Move(moveLocation);
-        //        annoText.LookupParameter("Длина").Set(length/commandData.View.Scale);
-
-        //        t.Commit();
-        //    }
-
-        //    using (var t = new Transaction(doc, "Добавление выноски"))
-        //    {
-        //        t.Start();
-        //        // Добавление выноски
-        //        annoText.addLeader();
-        //        var leader = annoText.Leaders.get_Item(0);
-        //        leader.Elbow = pt2;
-        //        leader.End = pt1;
-
-        //        t.Commit();
-        //    }
-        //}
+        }        
 
         /// <summary>
         /// Напраление построения выноски от первой и второй точек (1 - вправо, -1 влево)
