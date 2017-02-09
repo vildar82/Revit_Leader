@@ -158,31 +158,8 @@ namespace Leader
             Result result = Result.Succeeded;
             try
             {
-                //this.commandData = commandData;
-
-
-                //var app = commandData.Application;
-                //var uiDoc = commandData.Application.ActiveUIDocument;    
-                //app.Application.DocumentChanged += OnDocumentChanged;
-                ////uiDoc.PromptForFamilyInstancePlacement(annoType);
-                //uiDoc.PostRequestForElementTypePlacement(annoType);
-                //app.Application.DocumentChanged -= OnDocumentChanged;
-
                 var app = new InsertTextLeader();
-                app.Show();
-
-                
-                //while (true)
-                //{
-                //    if (form.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                //    {
-                //        Insert(FormAnno.Text1, FormAnno.Text2);
-                //    }
-                //    else
-                //    {
-                //        break;
-                //    }
-                //}
+                app.Show();                
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException) { }
             catch (Exception ex)
@@ -198,12 +175,7 @@ namespace Leader
             var exEvent = ExternalEvent.Create(new ExternalEventHandler());
             form = new FormAnno(exEvent);
             form.Show();
-        }
-
-        //private void OnDocumentChanged(object sender, DocumentChangedEventArgs e)
-        //{
-        //    var addedElems = e.GetAddedElementIds();            
-        //}
+        }        
 
         /// <summary>
         /// Проверка текущего вида - 3d и вид спецификации не поддерживается
