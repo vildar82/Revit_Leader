@@ -8,12 +8,12 @@
     <FullClassName>Leader.InsertTextLeader</FullClassName>
     <Text>InsertTextLeader</Text>        
   </AddIn>
-  <AddIn Type="Command">
+  <!--<AddIn Type="Command">
     <Assembly>Leader\Leader.dll</Assembly>
     <AddInId>951C8EC5-B5C0-4AA7-8633-A4E4AA02482E</AddInId>
     <VendorId>Vildar</VendorId>
     <VendorDescription>vildar82@gmail.com</VendorDescription>
     <FullClassName>Leader.TestIdling</FullClassName>
     <Text>TestIdling</Text>
-  </AddIn>
+  </AddIn>-->
 </RevitAddIns>

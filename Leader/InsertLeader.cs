@@ -10,11 +10,12 @@ using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.UI.Events;
 using System.Diagnostics;
 using Autodesk.Revit.DB.Events;
+using System.Reflection;
 
 namespace Leader
 {
     [Transaction(TransactionMode.Manual)]
-    [Regeneration( RegenerationOption.Manual)]
+    [Regeneration(RegenerationOption.Manual)]
     public class TestIdling : IExternalCommand
     {
         ExternalCommandData commandData;
@@ -27,7 +28,7 @@ namespace Leader
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
             this.commandData = commandData;
-            pt1 = commandData.Application.ActiveUIDocument.Selection.PickPoint("Первая точка");            
+            pt1 = commandData.Application.ActiveUIDocument.Selection.PickPoint("Первая точка");
             commandData.Application.Idling += Application_Idling;
             //var pt2 = commandData.Application.ActiveUIDocument.Selection.PickPoint("Вторая точка");
 
@@ -42,7 +43,7 @@ namespace Leader
             //var uiApp = new UIApplication(app);
             var uiApp = sender as UIApplication;
             var uiDoc = uiApp.ActiveUIDocument;
-            var view = uiDoc.ActiveView;            
+            var view = uiDoc.ActiveView;
             var doc = uiDoc.Document;
 
             e.SetRaiseWithoutDelay();
@@ -75,7 +76,7 @@ namespace Leader
             Rectangle rect = uiview.GetWindowRectangle();
             System.Drawing.Point p = System.Windows.Forms.Cursor.Position;
             double dx = (double)(p.X - rect.Left) / (rect.Right - rect.Left);
-            double dy = (double)(p.Y - rect.Bottom)/ (rect.Top - rect.Bottom);            
+            double dy = (double)(p.Y - rect.Bottom) / (rect.Top - rect.Bottom);
             IList<XYZ> corners = uiview.GetZoomCorners();
             XYZ a = corners[0];
             XYZ b = corners[1];
@@ -138,19 +139,27 @@ namespace Leader
 
 
     [Transaction(TransactionMode.Manual)]
-    public class InsertTextLeader : IExternalCommand
-    {
-        ExternalCommandData commandData;
-        AnnotationSymbolType annoType;        
+    public class InsertTextLeader : IExternalCommand, IExternalApplication
+    {        
+        FormAnno form;
+
+        public Result OnStartup(UIControlledApplication application)
+        {            
+            return Result.Succeeded;
+        }
+
+        public Result OnShutdown(UIControlledApplication application)
+        {            
+            return Result.Succeeded;
+        }
 
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
             Result result = Result.Succeeded;
             try
             {
-                this.commandData = commandData;
-                CheckView();
-                annoType = FindAnnoSymboltype();
+                //this.commandData = commandData;
+
 
                 //var app = commandData.Application;
                 //var uiDoc = commandData.Application.ActiveUIDocument;    
@@ -158,18 +167,22 @@ namespace Leader
                 ////uiDoc.PromptForFamilyInstancePlacement(annoType);
                 //uiDoc.PostRequestForElementTypePlacement(annoType);
                 //app.Application.DocumentChanged -= OnDocumentChanged;
-                var form = new FormAnno();
-                while (true)
-                {
-                    if (form.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                    {
-                        Insert(FormAnno.Text1, FormAnno.Text2);
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
+
+                var app = new InsertTextLeader();
+                app.Show();
+
+                
+                //while (true)
+                //{
+                //    if (form.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                //    {
+                //        Insert(FormAnno.Text1, FormAnno.Text2);
+                //    }
+                //    else
+                //    {
+                //        break;
+                //    }
+                //}
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException) { }
             catch (Exception ex)
@@ -180,26 +193,39 @@ namespace Leader
             return result;
         }
 
+        private void Show()
+        {
+            var exEvent = ExternalEvent.Create(new ExternalEventHandler());
+            form = new FormAnno(exEvent);
+            form.Show();
+        }
+
         //private void OnDocumentChanged(object sender, DocumentChangedEventArgs e)
         //{
         //    var addedElems = e.GetAddedElementIds();            
         //}
 
-        private void CheckView()
-        {
-            var view = commandData.View;
+        /// <summary>
+        /// Проверка текущего вида - 3d и вид спецификации не поддерживается
+        /// </summary>
+        private static void CheckView(View view)
+        {            
             if (view.ViewType == ViewType.ThreeD ||
             view.ViewType == ViewType.Schedule)
                 throw new Exception($"Текущий вид не поддерживается '{view.Name}'");
         }
 
-        private AnnotationSymbolType FindAnnoSymboltype()
+        /// <summary>
+        /// Поиск семейства выноски в чертеже
+        /// </summary>
+        /// <returns></returns>
+        private static AnnotationSymbolType FindAnnoSymboltype(Document doc)
         {
             // Семейство ATP_Текст
             string annoName = "ATP_Текст % Текст_ISO-2,5_0,9-I";
-            var collection = new FilteredElementCollector(commandData.Application.ActiveUIDocument.Document)
+            var collection = new FilteredElementCollector(doc)
                 .OfCategory(BuiltInCategory.OST_GenericAnnotation);
-            annoType = collection.OfType<AnnotationSymbolType>().FirstOrDefault(w => w.FamilyName == annoName);
+            var annoType = collection.OfType<AnnotationSymbolType>().FirstOrDefault(w => w.FamilyName == annoName);
             if (annoType == null)
             {
                 throw new Exception($"Не найдено семейство '{annoName}'");
@@ -207,55 +233,73 @@ namespace Leader
             return annoType;
         }
 
-        private void Insert(string text1, string text2)
+        /// <summary>
+        /// Вставка выноски
+        /// </summary>        
+        public static void Insert(UIApplication uiApp)
         {
-            var uiApp = commandData.Application;
-            var uiDoc = uiApp.ActiveUIDocument;
-            var doc = uiDoc.Document;
-
-            // Запрос точек ввода
-            var pt1 = uiDoc.Selection.PickPoint("Первая точка");
-            var pt2 = uiDoc.Selection.PickPoint("Вторая точка");
-            var dir = GetAnnoDirection(pt1, pt2);
-
-            AnnotationSymbol annoText;
-            using (var t = new Transaction(doc, "Создание выноски"))
+            try
             {
-                t.Start();                
+                var uiDoc = uiApp.ActiveUIDocument;
+                var doc = uiDoc.Document;
 
-                // Вставка семейства выноски в документ
-                annoText = doc.Create.NewFamilyInstance(pt2, annoType, uiDoc.ActiveView) as AnnotationSymbol;
-                annoText.LookupParameter("Пояснение сверху").Set(text1);
-                annoText.LookupParameter("Пояснение снизу").Set(text2);
+                CheckView(uiDoc.ActiveView);
+                var annoType = FindAnnoSymboltype(doc);
 
-                // Определение ширины выноски по тексту
-                annoText.LookupParameter("Длина").Set(0.01); // Минимальная длина линии 
-                doc.Regenerate();
-                var bound = annoText.get_BoundingBox(uiDoc.ActiveView);
-                var length = (bound.Max.X - bound.Min.X) * 1.1; // 1.1 - для отступа линии от текста
+                // Запрос точек ввода
+                var pt1 = uiDoc.Selection.PickPoint("Первая точка");
+                var pt2 = uiDoc.Selection.PickPoint("Вторая точка");
+                var dir = GetAnnoDirection(pt1, pt2);
 
-                // Сдвиг на половыну выноски в сторону
-                var moveLocation = new XYZ(length * 0.52 * dir, 0, 0); // 0.52 - отступ точки присоединения выноски
-                annoText.Location.Move(moveLocation);
-                annoText.LookupParameter("Длина").Set(length / commandData.View.Scale);          
+                AnnotationSymbol annoText;
+                using (var t = new Transaction(doc, "Создание выноски"))
+                {
+                    t.Start();
 
-                // Добавление линии выноски
-                annoText.addLeader();
-                var leader = annoText.Leaders.get_Item(0);
-                leader.Elbow = pt2;
-                leader.End = pt1;
+                    // Вставка семейства выноски в документ
+                    annoText = doc.Create.NewFamilyInstance(pt2, annoType, uiDoc.ActiveView) as AnnotationSymbol;
+                    annoText.LookupParameter("Пояснение сверху").Set(FormAnno.Text1);
+                    annoText.LookupParameter("Пояснение снизу").Set(FormAnno.Text2);
 
-                t.Commit();
+                    // Определение ширины выноски по тексту
+                    annoText.LookupParameter("Длина").Set(0.01); // Минимальная длина линии 
+                    doc.Regenerate();
+                    var bound = annoText.get_BoundingBox(uiDoc.ActiveView);
+                    var length = (bound.Max.X - bound.Min.X) * 1.1; // 1.1 - для отступа линии от текста
+
+                    // Сдвиг на половыну выноски в сторону
+                    var moveLocation = new XYZ(length * 0.52 * dir, 0, 0); // 0.52 - отступ точки присоединения выноски
+                    annoText.Location.Move(moveLocation);
+                    annoText.LookupParameter("Длина").Set(length / doc.ActiveView.Scale);
+
+                    // Добавление линии выноски
+                    annoText.addLeader();
+                    var leader = annoText.Leaders.get_Item(0);
+                    leader.Elbow = pt2;
+                    leader.End = pt1;
+
+                    t.Commit();
+                }
+
+                PluginStatistic.Writer.WriteRunToDB("Revit", "Выноска", "",
+                  FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).ProductVersion, doc.Title, false);
             }
-        }        
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                TaskDialog.Show("Выноска", ex.Message);
+            }
+        }
 
         /// <summary>
         /// Напраление построения выноски от первой и второй точек (1 - вправо, -1 влево)
         /// </summary>        
         private static int GetAnnoDirection(XYZ pt1, XYZ pt2)
-        {            
+        {
             var angle = (pt2 - pt1).AngleOnPlaneTo(XYZ.BasisX, XYZ.BasisZ);
-            return angle > 1.57 && angle < 4.71 ? -1 : 1;            
+            return angle > 1.57 && angle < 4.71 ? -1 : 1;
         }
     }
 }

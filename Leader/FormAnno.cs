@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Autodesk.Revit.UI;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -13,9 +14,11 @@ namespace Leader
     public partial class FormAnno : Form
     {
         static Point location;
+        ExternalEvent extEvent;
 
-        public FormAnno()
+        public FormAnno(ExternalEvent extEvent)
         {
+            this.extEvent = extEvent;
             InitializeComponent();
             KeyDown += FormAnno_KeyDown;
             Activated += FormAnno_Activated;
@@ -56,7 +59,8 @@ namespace Leader
         private void bInsert_Click(object sender, EventArgs e)
         {
             Text1 = GetText (textBox1.Text);
-            Text2 = GetText(textBox2.Text);            
+            Text2 = GetText(textBox2.Text);
+            extEvent.Raise();
         }
 
         private string GetText(string text)
