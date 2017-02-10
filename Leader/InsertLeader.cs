@@ -15,6 +15,148 @@ using System.Reflection;
 namespace Leader
 {
     [Transaction(TransactionMode.Manual)]
+    public class InsertTextLeader : IExternalCommand, IExternalApplication
+    {        
+        FormAnno form;
+
+        public Result OnStartup(UIControlledApplication application)
+        {            
+            return Result.Succeeded;
+        }
+
+        public Result OnShutdown(UIControlledApplication application)
+        {            
+            return Result.Succeeded;
+        }
+
+        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            Result result = Result.Succeeded;
+            try
+            {
+                var app = new InsertTextLeader();
+                app.Show();                
+            }
+            catch (Autodesk.Revit.Exceptions.OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                result = Result.Failed;
+            }
+            return result;
+        }
+
+        private void Show()
+        {
+            var exEvent = ExternalEvent.Create(new ExternalEventHandler());
+            form = new FormAnno(exEvent);
+            form.Show();
+        }        
+
+        /// <summary>
+        /// Проверка текущего вида - 3d и вид спецификации не поддерживается
+        /// </summary>
+        private static void CheckView(View view)
+        {            
+            if (view.ViewType == ViewType.ThreeD ||
+            view.ViewType == ViewType.Schedule)
+                throw new Exception($"Текущий вид не поддерживается '{view.Name}'");
+        }
+
+        /// <summary>
+        /// Поиск семейства выноски в чертеже
+        /// </summary>
+        /// <returns></returns>
+        private static AnnotationSymbolType FindAnnoSymboltype(Document doc, string typeName)
+        {
+            // Семейство ATP_Текст
+            string annoName = "ATP_Текст % Текст_ISO-2,5_0,9-I";
+            // Загрузка семейства с переопределением
+            Family family= FamilyLoadHelper.LoadFromCurrentDllLocation(doc, annoName);
+            if (family == null)
+            {
+                family = new FilteredElementCollector(doc).OfClass(typeof(Family)).FirstOrDefault(w => w.Name == annoName) as Family;                
+            }
+            var annoType = family.GetFamilySymbolIds().Select(s=> doc.GetElement(s)).FirstOrDefault(f=>f.Name == typeName) as AnnotationSymbolType;
+            if (annoType == null)
+            {
+                throw new Exception($"Не найден тип '{typeName}' у семейства '{annoName}'");                               
+            }
+            return annoType;
+        }
+
+        /// <summary>
+        /// Вставка выноски
+        /// </summary>        
+        public static void Insert(UIApplication uiApp)
+        {
+            try
+            {
+                var uiDoc = uiApp.ActiveUIDocument;
+                var doc = uiDoc.Document;
+
+                CheckView(uiDoc.ActiveView);
+                var annoType = FindAnnoSymboltype(doc, "Без стрелки");
+
+                // Запрос точек ввода
+                var pt1 = uiDoc.Selection.PickPoint("Первая точка");
+                var pt2 = uiDoc.Selection.PickPoint("Вторая точка");
+                var dir = GetAnnoDirection(pt1, pt2);
+
+                AnnotationSymbol annoText;
+                using (var t = new Transaction(doc, "Создание выноски"))
+                {
+                    t.Start();
+
+                    // Вставка семейства выноски в документ
+                    annoText = doc.Create.NewFamilyInstance(pt2, annoType, uiDoc.ActiveView) as AnnotationSymbol;
+                    annoText.LookupParameter("Пояснение сверху").Set(FormAnno.Text1);
+                    annoText.LookupParameter("Пояснение снизу").Set(FormAnno.Text2);
+
+                    // Определение ширины выноски по тексту
+                    annoText.LookupParameter("Длина").Set(0.01); // Минимальная длина линии 
+                    doc.Regenerate();
+                    var bound = annoText.get_BoundingBox(uiDoc.ActiveView);
+                    var length = (bound.Max.X - bound.Min.X) * 1.1; // 1.1 - для отступа линии от текста
+
+                    // Сдвиг на половыну выноски в сторону
+                    var moveLocation = new XYZ(length * 0.52 * dir, 0, 0); // 0.52 - отступ точки присоединения выноски
+                    annoText.Location.Move(moveLocation);
+                    annoText.LookupParameter("Длина").Set(length / doc.ActiveView.Scale);
+
+                    // Добавление линии выноски
+                    annoText.addLeader();
+                    var leader = annoText.Leaders.get_Item(0);
+                    leader.Elbow = pt2;
+                    leader.End = pt1;
+
+                    t.Commit();
+                }
+
+                PluginStatistic.Writer.WriteRunToDB("Revit", "R1.09_Выноска", "",
+                  FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).ProductVersion, doc.Title, false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                TaskDialog.Show("Выноска", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Напраление построения выноски от первой и второй точек (1 - вправо, -1 влево)
+        /// </summary>        
+        private static int GetAnnoDirection(XYZ pt1, XYZ pt2)
+        {
+            var angle = (pt2 - pt1).AngleOnPlaneTo(XYZ.BasisX, XYZ.BasisZ);
+            return angle > 1.57 && angle < 4.71 ? -1 : 1;
+        }
+    }
+
+
+    [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
     public class TestIdling : IExternalCommand
     {
@@ -136,142 +278,5 @@ namespace Leader
             return uiview;
         }
     }
-
-
-    [Transaction(TransactionMode.Manual)]
-    public class InsertTextLeader : IExternalCommand, IExternalApplication
-    {        
-        FormAnno form;
-
-        public Result OnStartup(UIControlledApplication application)
-        {            
-            return Result.Succeeded;
-        }
-
-        public Result OnShutdown(UIControlledApplication application)
-        {            
-            return Result.Succeeded;
-        }
-
-        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
-        {
-            Result result = Result.Succeeded;
-            try
-            {
-                var app = new InsertTextLeader();
-                app.Show();                
-            }
-            catch (Autodesk.Revit.Exceptions.OperationCanceledException) { }
-            catch (Exception ex)
-            {
-                message = ex.Message;
-                result = Result.Failed;
-            }
-            return result;
-        }
-
-        private void Show()
-        {
-            var exEvent = ExternalEvent.Create(new ExternalEventHandler());
-            form = new FormAnno(exEvent);
-            form.Show();
-        }        
-
-        /// <summary>
-        /// Проверка текущего вида - 3d и вид спецификации не поддерживается
-        /// </summary>
-        private static void CheckView(View view)
-        {            
-            if (view.ViewType == ViewType.ThreeD ||
-            view.ViewType == ViewType.Schedule)
-                throw new Exception($"Текущий вид не поддерживается '{view.Name}'");
-        }
-
-        /// <summary>
-        /// Поиск семейства выноски в чертеже
-        /// </summary>
-        /// <returns></returns>
-        private static AnnotationSymbolType FindAnnoSymboltype(Document doc)
-        {
-            // Семейство ATP_Текст
-            string annoName = "ATP_Текст % Текст_ISO-2,5_0,9-I";
-            var collection = new FilteredElementCollector(doc)
-                .OfCategory(BuiltInCategory.OST_GenericAnnotation);
-            var annoType = collection.OfType<AnnotationSymbolType>().FirstOrDefault(w => w.FamilyName == annoName);
-            if (annoType == null)
-            {
-                throw new Exception($"Не найдено семейство '{annoName}'");
-            }
-            return annoType;
-        }
-
-        /// <summary>
-        /// Вставка выноски
-        /// </summary>        
-        public static void Insert(UIApplication uiApp)
-        {
-            try
-            {
-                var uiDoc = uiApp.ActiveUIDocument;
-                var doc = uiDoc.Document;
-
-                CheckView(uiDoc.ActiveView);
-                var annoType = FindAnnoSymboltype(doc);
-
-                // Запрос точек ввода
-                var pt1 = uiDoc.Selection.PickPoint("Первая точка");
-                var pt2 = uiDoc.Selection.PickPoint("Вторая точка");
-                var dir = GetAnnoDirection(pt1, pt2);
-
-                AnnotationSymbol annoText;
-                using (var t = new Transaction(doc, "Создание выноски"))
-                {
-                    t.Start();
-
-                    // Вставка семейства выноски в документ
-                    annoText = doc.Create.NewFamilyInstance(pt2, annoType, uiDoc.ActiveView) as AnnotationSymbol;
-                    annoText.LookupParameter("Пояснение сверху").Set(FormAnno.Text1);
-                    annoText.LookupParameter("Пояснение снизу").Set(FormAnno.Text2);
-
-                    // Определение ширины выноски по тексту
-                    annoText.LookupParameter("Длина").Set(0.01); // Минимальная длина линии 
-                    doc.Regenerate();
-                    var bound = annoText.get_BoundingBox(uiDoc.ActiveView);
-                    var length = (bound.Max.X - bound.Min.X) * 1.1; // 1.1 - для отступа линии от текста
-
-                    // Сдвиг на половыну выноски в сторону
-                    var moveLocation = new XYZ(length * 0.52 * dir, 0, 0); // 0.52 - отступ точки присоединения выноски
-                    annoText.Location.Move(moveLocation);
-                    annoText.LookupParameter("Длина").Set(length / doc.ActiveView.Scale);
-
-                    // Добавление линии выноски
-                    annoText.addLeader();
-                    var leader = annoText.Leaders.get_Item(0);
-                    leader.Elbow = pt2;
-                    leader.End = pt1;
-
-                    t.Commit();
-                }
-
-                PluginStatistic.Writer.WriteRunToDB("Revit", "Выноска", "",
-                  FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).ProductVersion, doc.Title, false);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                TaskDialog.Show("Выноска", ex.Message);
-            }
-        }
-
-        /// <summary>
-        /// Напраление построения выноски от первой и второй точек (1 - вправо, -1 влево)
-        /// </summary>        
-        private static int GetAnnoDirection(XYZ pt1, XYZ pt2)
-        {
-            var angle = (pt2 - pt1).AngleOnPlaneTo(XYZ.BasisX, XYZ.BasisZ);
-            return angle > 1.57 && angle < 4.71 ? -1 : 1;
-        }
-    }
 }
+
